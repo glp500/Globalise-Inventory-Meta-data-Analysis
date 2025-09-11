@@ -1,0 +1,47 @@
+model:
+  name: "Qwen/Qwen2-VL-7B-Instruct"  # Correct HuggingFace model name
+  device: "cpu"  # Use CPU until GPU/dependencies are fixed
+  torch_dtype: "float32"  # Use full precision for CPU
+  temperature: 0.1
+  max_tokens: 50
+  fallback_to_cpu: true  # Fallback to CPU if GPU fails
+
+detection:
+  two_page_threshold: 1.8  # aspect ratio
+  foldout_threshold: 3.0   # aspect ratio
+  center_fold_width: 50     # pixels
+  edge_detection_sensitivity: 0.7
+
+classification:
+  confidence_thresholds:
+    high: 0.8
+    medium: 0.5
+    low: 0.3
+  batch_size: 16  # Increased from 10 for better throughput
+  save_interval: 50  # Reduce I/O frequency
+  parallel_workers: 4  # Add parallelization
+
+output:
+  create_subdirs: true
+  generate_report: true
+  copy_files: false  # false = move, true = copy
+  report_format: "csv"  # or "json"
+
+# Performance optimization settings
+performance:
+  use_gpu: true
+  mixed_precision: true
+  async_io: true
+  memory_limit_gb: 8
+
+# Monitoring and diagnostics
+monitoring:
+  enable_metrics: true
+  log_performance: true
+  checkpoint_frequency: 100
+
+# Quality and error handling
+quality:
+  confidence_threshold: 0.7
+  retry_on_error: true
+  fallback_to_cpu: true

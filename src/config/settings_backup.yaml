@@ -1,0 +1,25 @@
+model:
+  name: "Qwen/Qwen2-VL-7B-Instruct"
+  device: "cpu"  # Using CPU for now to avoid model loading issues
+  temperature: 0.1
+  max_tokens: 50
+
+detection:
+  two_page_threshold: 1.8  # aspect ratio
+  foldout_threshold: 3.0   # aspect ratio
+  center_fold_width: 50     # pixels
+  edge_detection_sensitivity: 0.7
+
+classification:
+  confidence_thresholds:
+    high: 0.8
+    medium: 0.5
+    low: 0.3
+  batch_size: 10
+  save_interval: 100
+
+output:
+  create_subdirs: true
+  generate_report: true
+  copy_files: false  # false = move, true = copy
+  report_format: "csv"  # or "json"
