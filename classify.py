@@ -4,12 +4,11 @@ Simple VOC Archive Page Classifier with Model Swapping
 Usage: python classify.py <input_directory> [output_file] [--model MODEL_NAME]
 """
 
-import os
 import sys
 import json
 import argparse
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from PIL import Image
 import logging
 
@@ -46,13 +45,19 @@ except ImportError:
     ACCELERATE_AVAILABLE = False
     logger.error("Required packages not installed. Run: pip install torch transformers pillow")
 
-# Classification categories
-CATEGORIES = [
-    "single_column", "two_column", "table_full", "table_partial",
-    "marginalia", "two_page_spread", "extended_foldout", "illustration",
-    "title_page", "blank", "seal_signature", "mixed_layout",
-    "damaged_partial", "index_list"
-]
+# Classification questions and their possible answers
+CLASSIFICATION_QUESTIONS = {
+    "empty_status": ["blank", "non_blank"],
+    "page_size": ["standard_page", "extended_foldout", "two_page_spread"],
+    "text_layout": ["single_column", "two_column", "mixed_layout"],
+    "table_presence": ["table_full", "table_partial", "table_none"],
+    "marginalia": ["marginalia", "no_marginalia"],
+    "illustrations": ["illustration", "no_illustration"],
+    "title_page": ["title_page", "non_title_page"],
+    "seals_signatures": ["seal_signature", "no_signatures"],
+    "damage": ["damaged_partial", "no_damage"],
+    "index_list": ["index_list", "no_index_list"]
+}
 
 # Popular VL models for quick testing
 POPULAR_MODELS = {
@@ -82,26 +87,43 @@ def detect_model_family(model_name: str) -> str:
     else:
         return "auto"
 
-# Classification prompt
+# Multi-question classification prompt
 CLASSIFICATION_PROMPT = """
-Analyze this historical document page and classify it into one of these categories:
+Analyze this historical document page and provide a detailed analysis. Please respond in the exact format shown below:
 
-- single_column: Text in a single column layout
-- two_column: Text arranged in two columns
-- table_full: Page dominated by tabular data
-- table_partial: Page with some tabular content mixed with text
-- marginalia: Text with significant margin notes or annotations
-- two_page_spread: Two pages side by side in one image
-- extended_foldout: Unusually wide page that unfolds
-- illustration: Page dominated by drawings, maps, or diagrams
-- title_page: Title page or cover page
-- blank: Mostly blank or empty page
-- seal_signature: Page with official seals or signatures
-- mixed_layout: Complex layout combining multiple elements
-- damaged_partial: Damaged or partially visible page
-- index_list: Index, list, or catalog format
+SUMMARY: [Write a 2-3 sentence summary describing the page's visual and layout features]
 
-Respond with only the category name, nothing else.
+QUESTION 1 - Empty or not?
+Answer: [blank OR non_blank]
+
+QUESTION 2 - Is it a standard or special page size?
+Answer: [standard_page OR extended_foldout OR two_page_spread]
+
+QUESTION 3 - What is the layout of the text on the page?
+Answer: [single_column OR two_column OR mixed_layout]
+
+QUESTION 4 - Is there a table or tabular data present on the page?
+Answer: [table_full OR table_partial OR table_none]
+
+QUESTION 5 - Does the page contain marginalia?
+Answer: [marginalia OR no_marginalia]
+
+QUESTION 6 - Does the page contain illustrations or visuals?
+Answer: [illustration OR no_illustration]
+
+QUESTION 7 - Is this a title page?
+Answer: [title_page OR non_title_page]
+
+QUESTION 8 - Does the page contain seals or signatures?
+Answer: [seal_signature OR no_signatures]
+
+QUESTION 9 - Is the page damaged or partially visible?
+Answer: [damaged_partial OR no_damage]
+
+QUESTION 10 - Does the page contain indexes, lists, or catalogs?
+Answer: [index_list OR no_index_list]
+
+Respond in exactly this format with the exact answer options provided.
 """
 
 
@@ -152,7 +174,7 @@ class SimpleVOCClassifier:
             # Use device_map="auto" only if accelerate is available and CUDA is used
             if self.device == "cuda" and ACCELERATE_AVAILABLE:
                 device_map = "auto"
-                logger.info(f"Using accelerate for automatic device mapping")
+                logger.info("Using accelerate for automatic device mapping")
             else:
                 device_map = None
                 if self.device == "cuda" and not ACCELERATE_AVAILABLE:
@@ -227,7 +249,7 @@ class SimpleVOCClassifier:
                 raise RuntimeError(f"Failed to load model {self.model_name}: {e2}")
 
     def classify_image(self, image_path: str) -> Dict[str, Any]:
-        """Classify a single image."""
+        """Classify a single image using multi-question approach."""
         try:
             # Load and process image
             image = Image.open(image_path).convert('RGB')
@@ -242,12 +264,24 @@ class SimpleVOCClassifier:
             else:
                 response = self._classify_generic(image)
 
-            # Find best matching category
-            category = self._match_category(response)
+            # Parse multi-question response
+            classification_results = self._parse_multi_question_response(response)
 
             return {
                 "image_path": str(image_path),
-                "category": category,
+                "summary": classification_results["summary"],
+                "classifications": {
+                    "empty_status": classification_results["empty_status"],
+                    "page_size": classification_results["page_size"],
+                    "text_layout": classification_results["text_layout"],
+                    "table_presence": classification_results["table_presence"],
+                    "marginalia": classification_results["marginalia"],
+                    "illustrations": classification_results["illustrations"],
+                    "title_page": classification_results["title_page"],
+                    "seals_signatures": classification_results["seals_signatures"],
+                    "damage": classification_results["damage"],
+                    "index_list": classification_results["index_list"]
+                },
                 "raw_response": response,
                 "status": "success",
                 "model": self.model_name
@@ -257,7 +291,19 @@ class SimpleVOCClassifier:
             logger.error(f"Error processing {image_path}: {e}")
             return {
                 "image_path": str(image_path),
-                "category": "error",
+                "summary": "",
+                "classifications": {
+                    "empty_status": "error",
+                    "page_size": "error",
+                    "text_layout": "error",
+                    "table_presence": "error",
+                    "marginalia": "error",
+                    "illustrations": "error",
+                    "title_page": "error",
+                    "seals_signatures": "error",
+                    "damage": "error",
+                    "index_list": "error"
+                },
                 "raw_response": str(e),
                 "status": "error",
                 "model": self.model_name
@@ -279,12 +325,12 @@ class SimpleVOCClassifier:
         inputs = self.processor(text=[text], images=[image], return_tensors="pt").to(self.device)
 
         with torch.no_grad():
-            generated_ids = self.model.generate(**inputs, max_new_tokens=10, temperature=0.1, do_sample=False)
+            generated_ids = self.model.generate(**inputs, max_new_tokens=300, temperature=0.1, do_sample=False)
 
         generated_ids_trimmed = [
             out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
         ]
-        return self.processor.batch_decode(generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0].strip().lower()
+        return self.processor.batch_decode(generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0].strip()
 
     def _classify_llava(self, image: Image.Image) -> str:
         """Classify using LLaVA format."""
@@ -292,51 +338,73 @@ class SimpleVOCClassifier:
         inputs = self.processor(prompt, image, return_tensors="pt").to(self.device)
 
         with torch.no_grad():
-            generated_ids = self.model.generate(**inputs, max_new_tokens=10, temperature=0.1, do_sample=False)
+            generated_ids = self.model.generate(**inputs, max_new_tokens=300, temperature=0.1, do_sample=False)
 
         generated_text = self.processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-        return generated_text.split("ASSISTANT:")[-1].strip().lower()
+        return generated_text.split("ASSISTANT:")[-1].strip()
 
     def _classify_instructblip(self, image: Image.Image) -> str:
         """Classify using InstructBLIP format."""
         inputs = self.processor(images=image, text=CLASSIFICATION_PROMPT, return_tensors="pt").to(self.device)
 
         with torch.no_grad():
-            generated_ids = self.model.generate(**inputs, max_new_tokens=10, temperature=0.1, do_sample=False)
+            generated_ids = self.model.generate(**inputs, max_new_tokens=300, temperature=0.1, do_sample=False)
 
-        return self.processor.batch_decode(generated_ids, skip_special_tokens=True)[0].strip().lower()
+        return self.processor.batch_decode(generated_ids, skip_special_tokens=True)[0].strip()
 
     def _classify_generic(self, image: Image.Image) -> str:
         """Classify using generic format."""
         try:
             # Try Qwen2-VL format first
             return self._classify_qwen2vl(image)
-        except:
+        except Exception:
             try:
                 # Try LLaVA format
                 return self._classify_llava(image)
-            except:
+            except Exception:
                 try:
                     # Try InstructBLIP format
                     return self._classify_instructblip(image)
-                except:
+                except Exception:
                     raise RuntimeError("Unable to classify with any known format")
 
-    def _match_category(self, response: str) -> str:
-        """Match response to valid category."""
-        response = response.lower().strip()
+    def _parse_multi_question_response(self, response: str) -> Dict[str, Any]:
+        """Parse multi-question response format."""
+        result = {
+            "summary": "",
+            "empty_status": "unknown",
+            "page_size": "unknown",
+            "text_layout": "unknown",
+            "table_presence": "unknown",
+            "marginalia": "unknown",
+            "illustrations": "unknown",
+            "title_page": "unknown",
+            "seals_signatures": "unknown",
+            "damage": "unknown",
+            "index_list": "unknown"
+        }
 
-        # Direct match
-        if response in CATEGORIES:
-            return response
+        lines = response.strip().split('\n')
 
-        # Partial match
-        for category in CATEGORIES:
-            if category in response or response in category:
-                return category
+        for line in lines:
+            line = line.strip()
 
-        # Default fallback
-        return "mixed_layout"
+            # Extract summary
+            if line.startswith('SUMMARY:'):
+                result["summary"] = line.replace('SUMMARY:', '').strip()
+
+            # Extract answers - look for "Answer:" followed by the response
+            elif 'Answer:' in line:
+                answer_part = line.split('Answer:')[-1].strip().lower()
+
+                # Match to question categories
+                for question_key, valid_answers in CLASSIFICATION_QUESTIONS.items():
+                    for valid_answer in valid_answers:
+                        if valid_answer.lower() in answer_part or answer_part in valid_answer.lower():
+                            result[question_key] = valid_answer
+                            break
+
+        return result
 
     def classify_directory(self, input_dir: str) -> List[Dict[str, Any]]:
         """Classify all images in a directory."""
@@ -345,11 +413,11 @@ class SimpleVOCClassifier:
         if not input_path.exists():
             raise FileNotFoundError(f"Directory not found: {input_dir}")
 
-        # Find all image files
+        # Find all image files (exclude macOS metadata files)
         image_extensions = {'.jpg', '.jpeg', '.png', '.tiff', '.tif', '.bmp'}
         image_files = [
             f for f in input_path.rglob("*")
-            if f.is_file() and f.suffix.lower() in image_extensions
+            if f.is_file() and f.suffix.lower() in image_extensions and not f.name.startswith('._')
         ]
 
         if not image_files:
@@ -363,6 +431,10 @@ class SimpleVOCClassifier:
             logger.info(f"Processing {i}/{len(image_files)}: {image_file.name}")
             result = self.classify_image(str(image_file))
             results.append(result)
+
+            # Clear GPU cache after each image for large models
+            if self.device == "cuda":
+                torch.cuda.empty_cache()
 
         return results
 
@@ -418,7 +490,7 @@ Examples:
         successful = len([r for r in results if r['status'] == 'success'])
         errors = total - successful
 
-        print(f"\nClassification complete!")
+        print("\nClassification complete!")
         print(f"Model used: {classifier.model_name}")
         print(f"Total images: {total}")
         print(f"Successfully classified: {successful}")
@@ -426,16 +498,24 @@ Examples:
         print(f"Results saved to: {args.output}")
 
         if successful > 0:
-            # Show category distribution
-            categories = {}
+            # Show category distribution for each question
+            question_stats = {}
+            for question_key in CLASSIFICATION_QUESTIONS.keys():
+                question_stats[question_key] = {}
+
             for result in results:
                 if result['status'] == 'success':
-                    cat = result['category']
-                    categories[cat] = categories.get(cat, 0) + 1
+                    classifications = result['classifications']
+                    for question_key, answer in classifications.items():
+                        if answer not in question_stats[question_key]:
+                            question_stats[question_key][answer] = 0
+                        question_stats[question_key][answer] += 1
 
-            print("\nCategory distribution:")
-            for cat, count in sorted(categories.items()):
-                print(f"  {cat}: {count}")
+            print("\nClassification distribution:")
+            for question_key, answers in question_stats.items():
+                print(f"\n{question_key.replace('_', ' ').title()}:")
+                for answer, count in sorted(answers.items()):
+                    print(f"  {answer}: {count}")
 
     except Exception as e:
         logger.error(f"Classification failed: {e}")
