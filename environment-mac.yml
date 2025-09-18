@@ -10,4 +10,4 @@ dependencies:
   - pillow>=9.5.0
   - pip
   - pip:
-    - transformers>=4.35.0
+    - transformers>=4.45.0

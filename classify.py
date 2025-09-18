@@ -25,9 +25,17 @@ try:
         LlavaNextForConditionalGeneration,
         InstructBlipForConditionalGeneration
     )
+    # Try to import newer Qwen models if available
+    try:
+        from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration
+        QWEN25_AVAILABLE = True
+    except ImportError:
+        QWEN25_AVAILABLE = False
+
     TRANSFORMERS_AVAILABLE = True
 except ImportError:
     TRANSFORMERS_AVAILABLE = False
+    QWEN25_AVAILABLE = False
     logger.error("Required packages not installed. Run: pip install torch transformers pillow")
 
 # Classification categories
@@ -43,6 +51,9 @@ POPULAR_MODELS = {
     "qwen2-vl-2b": "Qwen/Qwen2-VL-2B-Instruct",
     "qwen2-vl-7b": "Qwen/Qwen2-VL-7B-Instruct",
     "qwen2-vl-72b": "Qwen/Qwen2-VL-72B-Instruct",
+    "qwen2.5-vl-3b": "Qwen/Qwen2.5-VL-3B-Instruct",
+    "qwen2.5-vl-7b": "Qwen/Qwen2.5-VL-7B-Instruct",
+    "qwen2.5-vl-32b": "Qwen/Qwen2.5-VL-32B-Instruct",
     "llava-1.6-7b": "llava-hf/llava-v1.6-vicuna-7b-hf",
     "llava-1.6-13b": "llava-hf/llava-v1.6-vicuna-13b-hf",
     "instructblip-7b": "Salesforce/instructblip-vicuna-7b",
@@ -52,7 +63,9 @@ POPULAR_MODELS = {
 def detect_model_family(model_name: str) -> str:
     """Detect model family from model name."""
     model_name = model_name.lower()
-    if "qwen2-vl" in model_name or "qwen/qwen2-vl" in model_name:
+    if "qwen2.5-vl" in model_name or "qwen/qwen2.5-vl" in model_name:
+        return "qwen2.5-vl"
+    elif "qwen2-vl" in model_name or "qwen/qwen2-vl" in model_name:
         return "qwen2-vl"
     elif "llava" in model_name:
         return "llava"
@@ -131,7 +144,18 @@ class SimpleVOCClassifier:
 
             logger.info(f"Loading with dtype: {torch_dtype}")
 
-            if self.model_family == "qwen2-vl":
+            if self.model_family == "qwen2.5-vl":
+                if QWEN25_AVAILABLE:
+                    self.model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+                        self.model_name,
+                        torch_dtype=torch_dtype,
+                        device_map=device_map,
+                        low_cpu_mem_usage=True
+                    )
+                else:
+                    logger.warning("Qwen2.5-VL model requested but not available. Trying fallback...")
+                    raise ImportError("Qwen2.5-VL not available")
+            elif self.model_family == "qwen2-vl":
                 self.model = Qwen2VLForConditionalGeneration.from_pretrained(
                     self.model_name,
                     torch_dtype=torch_dtype,
@@ -193,7 +217,7 @@ class SimpleVOCClassifier:
             image = Image.open(image_path).convert('RGB')
 
             # Generate classification based on model family
-            if self.model_family == "qwen2-vl":
+            if self.model_family in ["qwen2-vl", "qwen2.5-vl"]:
                 response = self._classify_qwen2vl(image)
             elif self.model_family == "llava":
                 response = self._classify_llava(image)
