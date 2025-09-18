@@ -4,6 +4,30 @@ A streamlined tool for classifying scanned pages from VOC (Dutch East India Comp
 
 ## Installation
 
+### Option 1: Conda Environment (Recommended)
+
+#### For CUDA GPU Systems
+```bash
+# Create and activate conda environment with CUDA support
+conda env create -f environment.yml
+conda activate voc-classifier
+```
+
+#### For CPU-Only Systems
+```bash
+# Create and activate CPU-only environment
+conda env create -f environment-cpu.yml
+conda activate voc-classifier-cpu
+```
+
+#### For macOS (Apple Silicon/Intel)
+```bash
+# Create and activate macOS environment with Metal support
+conda env create -f environment-mac.yml
+conda activate voc-classifier-mac
+```
+
+### Option 2: Pip Installation
 ```bash
 pip install -r requirements.txt
 ```
@@ -124,9 +148,51 @@ Automatically used if no GPU acceleration is available.
 
 Perfect for remote development through SSH connections:
 
-1. **Connect via SSH in VSCode**: Open remote folder in VSCode
-2. **Install dependencies**: `pip install -r requirements.txt`
-3. **Test GPU**: `python test_gpu.py`
-4. **Run classifier**: `python classify.py /path/to/images --model qwen2-vl-2b`
+### With Conda (Recommended)
+```bash
+# 1. Connect via SSH in VSCode
+# 2. Create conda environment
+conda env create -f environment.yml
+conda activate voc-classifier
+
+# 3. Test GPU
+python test_gpu.py
+
+# 4. Run classifier
+python classify.py /path/to/images --model qwen2-vl-2b
+```
+
+### With Pip
+```bash
+# 1. Connect via SSH in VSCode
+# 2. Install dependencies
+pip install -r requirements.txt
+
+# 3. Test GPU
+python test_gpu.py
+
+# 4. Run classifier
+python classify.py /path/to/images --model qwen2-vl-2b
+```
 
 The program will automatically use CUDA if available on the remote server, or fallback gracefully to CPU.
+
+## Environment Management
+
+### Conda Commands
+```bash
+# List environments
+conda env list
+
+# Activate environment
+conda activate voc-classifier
+
+# Deactivate environment
+conda deactivate
+
+# Remove environment
+conda env remove -n voc-classifier
+
+# Update environment
+conda env update -f environment.yml --prune
+```

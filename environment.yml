@@ -1,0 +1,15 @@
+name: voc-classifier
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  - python>=3.8,<3.13
+  - pytorch>=2.0.0
+  - torchvision>=0.15.0
+  - pytorch-cuda=11.8  # For CUDA support, remove if CPU-only
+  - pillow>=9.5.0
+  - pip
+  - pip:
+    - transformers>=4.35.0

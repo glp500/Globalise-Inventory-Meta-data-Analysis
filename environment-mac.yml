@@ -1,0 +1,13 @@
+name: voc-classifier-mac
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - python>=3.8,<3.13
+  - pytorch>=2.0.0
+  - torchvision>=0.15.0
+  - pillow>=9.5.0
+  - pip
+  - pip:
+    - transformers>=4.35.0
