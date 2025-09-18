@@ -92,7 +92,8 @@ class SimpleVOCClassifier:
         if not TRANSFORMERS_AVAILABLE:
             raise RuntimeError("Required packages not available")
 
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        # Determine best available device
+        self.device = self._get_best_device()
         logger.info(f"Using device: {self.device}")
 
         # Resolve model name from shortcuts
@@ -105,39 +106,68 @@ class SimpleVOCClassifier:
         self._load_model()
         logger.info("Model loaded successfully")
 
+    def _get_best_device(self) -> str:
+        """Determine the best available device for inference."""
+        if torch.cuda.is_available():
+            device_name = torch.cuda.get_device_name()
+            logger.info(f"CUDA GPU detected: {device_name}")
+            return "cuda"
+        elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            logger.info("Apple Metal Performance Shaders (MPS) detected")
+            return "mps"
+        else:
+            logger.info("Using CPU (no GPU acceleration available)")
+            return "cpu"
+
     def _load_model(self):
         """Load model and processor based on detected family."""
         try:
             self.processor = AutoProcessor.from_pretrained(self.model_name)
 
+            # Determine optimal dtype and device mapping
+            use_gpu = self.device in ["cuda", "mps"]
+            torch_dtype = torch.float16 if use_gpu else torch.float32
+            device_map = "auto" if self.device == "cuda" else None
+
+            logger.info(f"Loading with dtype: {torch_dtype}")
+
             if self.model_family == "qwen2-vl":
                 self.model = Qwen2VLForConditionalGeneration.from_pretrained(
                     self.model_name,
-                    torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
-                    device_map="auto" if self.device == "cuda" else None
+                    torch_dtype=torch_dtype,
+                    device_map=device_map,
+                    low_cpu_mem_usage=True
                 )
             elif self.model_family == "llava":
                 self.model = LlavaNextForConditionalGeneration.from_pretrained(
                     self.model_name,
-                    torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
-                    device_map="auto" if self.device == "cuda" else None
+                    torch_dtype=torch_dtype,
+                    device_map=device_map,
+                    low_cpu_mem_usage=True
                 )
             elif self.model_family == "instructblip":
                 self.model = InstructBlipForConditionalGeneration.from_pretrained(
                     self.model_name,
-                    torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
-                    device_map="auto" if self.device == "cuda" else None
+                    torch_dtype=torch_dtype,
+                    device_map=device_map,
+                    low_cpu_mem_usage=True
                 )
             else:
                 # Try auto-detection
                 self.model = AutoModelForCausalLM.from_pretrained(
                     self.model_name,
-                    torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
-                    device_map="auto" if self.device == "cuda" else None
+                    torch_dtype=torch_dtype,
+                    device_map=device_map,
+                    low_cpu_mem_usage=True
                 )
 
-            if self.device == "cpu":
+            # Move to device if not using auto device mapping
+            if device_map is None:
                 self.model = self.model.to(self.device)
+
+            # Clear GPU cache if using CUDA
+            if self.device == "cuda":
+                torch.cuda.empty_cache()
 
         except Exception as e:
             logger.error(f"Failed to load {self.model_name}: {e}")
@@ -146,12 +176,13 @@ class SimpleVOCClassifier:
                 self.processor = AutoProcessor.from_pretrained(self.model_name)
                 self.model = AutoModelForCausalLM.from_pretrained(
                     self.model_name,
-                    torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
-                    device_map="auto" if self.device == "cuda" else None
+                    torch_dtype=torch.float32,  # Use float32 for fallback
+                    low_cpu_mem_usage=True
                 )
-                if self.device == "cpu":
-                    self.model = self.model.to(self.device)
+                self.model = self.model.to(self.device)
                 self.model_family = "auto"
+                if self.device == "cuda":
+                    torch.cuda.empty_cache()
             except Exception as e2:
                 raise RuntimeError(f"Failed to load model {self.model_name}: {e2}")
 

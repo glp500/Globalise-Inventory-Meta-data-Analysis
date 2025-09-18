@@ -92,13 +92,41 @@ Results are saved as JSON with this format:
 ## Requirements
 
 - Python 3.8+
-- CUDA-capable GPU (recommended) or CPU
+- GPU acceleration: CUDA, Apple Metal (MPS), or CPU fallback
 - RAM: 4-8GB for 2B models, 8-16GB for 7B models, 32GB+ for 72B models
 
-## SSH Deployment
+## GPU Support
 
-Perfect for remote classification:
-1. Copy `classify.py` and `requirements.txt` to server
-2. Install dependencies: `pip install -r requirements.txt`
-3. Start with small model: `python classify.py /remote/path --model qwen2-vl-2b`
-4. Scale up model size based on server resources
+The classifier automatically detects and uses the best available acceleration:
+
+### NVIDIA CUDA
+```bash
+# Verify CUDA is available
+python test_gpu.py
+
+# Run with CUDA acceleration
+python classify.py /path/to/images --model qwen2-vl-7b
+```
+
+### Apple Metal (MPS)
+```bash
+# Verify Metal is available
+python test_gpu.py
+
+# Run with Metal acceleration (macOS)
+python classify.py /path/to/images --model qwen2-vl-7b
+```
+
+### CPU Fallback
+Automatically used if no GPU acceleration is available.
+
+## SSH + VSCode Usage
+
+Perfect for remote development through SSH connections:
+
+1. **Connect via SSH in VSCode**: Open remote folder in VSCode
+2. **Install dependencies**: `pip install -r requirements.txt`
+3. **Test GPU**: `python test_gpu.py`
+4. **Run classifier**: `python classify.py /path/to/images --model qwen2-vl-2b`
+
+The program will automatically use CUDA if available on the remote server, or fallback gracefully to CPU.
