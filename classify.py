@@ -32,10 +32,18 @@ try:
     except ImportError:
         QWEN25_AVAILABLE = False
 
+    # Check for accelerate availability
+    try:
+        import accelerate
+        ACCELERATE_AVAILABLE = True
+    except ImportError:
+        ACCELERATE_AVAILABLE = False
+
     TRANSFORMERS_AVAILABLE = True
 except ImportError:
     TRANSFORMERS_AVAILABLE = False
     QWEN25_AVAILABLE = False
+    ACCELERATE_AVAILABLE = False
     logger.error("Required packages not installed. Run: pip install torch transformers pillow")
 
 # Classification categories
@@ -140,7 +148,15 @@ class SimpleVOCClassifier:
             # Determine optimal dtype and device mapping
             use_gpu = self.device in ["cuda", "mps"]
             torch_dtype = torch.float16 if use_gpu else torch.float32
-            device_map = "auto" if self.device == "cuda" else None
+
+            # Use device_map="auto" only if accelerate is available and CUDA is used
+            if self.device == "cuda" and ACCELERATE_AVAILABLE:
+                device_map = "auto"
+                logger.info(f"Using accelerate for automatic device mapping")
+            else:
+                device_map = None
+                if self.device == "cuda" and not ACCELERATE_AVAILABLE:
+                    logger.warning("Accelerate not available, using manual device assignment")
 
             logger.info(f"Loading with dtype: {torch_dtype}")
 
@@ -195,7 +211,7 @@ class SimpleVOCClassifier:
 
         except Exception as e:
             logger.error(f"Failed to load {self.model_name}: {e}")
-            logger.info("Falling back to auto-loading...")
+            logger.info("Falling back to auto-loading without device mapping...")
             try:
                 self.processor = AutoProcessor.from_pretrained(self.model_name)
                 self.model = AutoModelForCausalLM.from_pretrained(
