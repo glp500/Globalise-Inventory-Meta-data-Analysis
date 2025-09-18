@@ -416,7 +416,7 @@ class SimpleVOCClassifier:
                     raise RuntimeError("Unable to classify with any known format")
 
     def _parse_multi_question_response(self, response: str) -> Dict[str, Any]:
-        """Parse multi-question response format with explanations - robust version."""
+        """Parse multi-question response format - handles actual model output format."""
         result = {
             "summary": "",
             "empty_status": {"answer": "unknown", "explanation": ""},
@@ -431,18 +431,18 @@ class SimpleVOCClassifier:
             "index_list": {"answer": "unknown", "explanation": ""}
         }
 
-        # Question mapping with multiple possible identifiers
+        # Question mapping - matches what the model actually outputs
         question_patterns = {
-            "empty_status": ["content presence", "question 1", "empty or not"],
-            "page_size": ["page format", "question 2", "page size", "standard or special"],
-            "text_layout": ["text arrangement", "question 3", "text layout", "layout of"],
-            "table_presence": ["tabular content", "question 4", "table", "tabular data"],
-            "marginalia": ["marginal annotations", "question 5", "marginalia"],
-            "illustrations": ["visual elements", "question 6", "illustrations", "visuals"],
-            "title_page": ["document type", "question 7", "title page"],
-            "seals_signatures": ["authentication marks", "question 8", "seals", "signatures"],
-            "damage": ["physical condition", "question 9", "damage", "damaged"],
-            "index_list": ["content type", "question 10", "index", "list", "catalog"]
+            "empty_status": ["content presence", "question 1"],
+            "page_size": ["page format", "question 2"],
+            "text_layout": ["text arrangement", "question 3"],
+            "table_presence": ["tabular content", "question 4"],
+            "marginalia": ["marginal annotations", "question 5"],
+            "illustrations": ["visual elements", "question 6"],
+            "title_page": ["document type", "question 7"],
+            "seals_signatures": ["authentication marks", "question 8"],
+            "damage": ["physical condition", "question 9"],
+            "index_list": ["content type", "question 10"]
         }
 
         lines = response.strip().split('\n')
@@ -451,65 +451,104 @@ class SimpleVOCClassifier:
         current_explanation = ""
 
         for line in lines:
-            line_lower = line.strip().lower()
             line = line.strip()
+            line_lower = line.lower()
 
             # Extract summary
-            if line.startswith('SUMMARY:') or line_lower.startswith('summary:'):
-                result["summary"] = line.split(':', 1)[1].strip() if ':' in line else ""
+            if line.startswith('SUMMARY:'):
+                result["summary"] = line.split(':', 1)[1].strip()
                 continue
 
-            # Identify which question we're processing - more robust matching
-            question_found = False
-            for question_key, patterns in question_patterns.items():
-                for pattern in patterns:
-                    if pattern in line_lower and ('question' in line_lower or ':' in line):
+            # Check if this is a question line with answer (format: "QUESTION X - Description: answer")
+            if line.startswith('QUESTION') and ':' in line:
+                # Identify which question this is
+                for question_key, patterns in question_patterns.items():
+                    if any(pattern in line_lower for pattern in patterns):
                         current_question = question_key
-                        collecting_explanation = False
-                        question_found = True
+
+                        # Extract answer from after the colon
+                        if ':' in line:
+                            answer_part = line.split(':', 1)[1].strip().lower()
+
+                            # Match answer to valid options - prioritize exact matches
+                            if current_question in CLASSIFICATION_QUESTIONS:
+                                # First try exact match
+                                for valid_answer in CLASSIFICATION_QUESTIONS[current_question]:
+                                    if valid_answer.lower() == answer_part:
+                                        result[current_question]["answer"] = valid_answer
+                                        break
+                                else:
+                                    # If no exact match, try substring matching (prefer longer matches)
+                                    best_match = None
+                                    best_match_length = 0
+                                    for valid_answer in CLASSIFICATION_QUESTIONS[current_question]:
+                                        if (answer_part in valid_answer.lower() or
+                                            valid_answer.lower() in answer_part):
+                                            # Prefer longer matches (more specific)
+                                            if len(valid_answer) > best_match_length:
+                                                best_match = valid_answer
+                                                best_match_length = len(valid_answer)
+
+                                    if best_match:
+                                        result[current_question]["answer"] = best_match
                         break
-                if question_found:
-                    break
+                continue
 
-            # Extract answers - multiple formats
-            if current_question and ('answer:' in line_lower or
-                                   (line_lower.strip().startswith('[') and line_lower.strip().endswith(']'))):
+            # Extract explanations
+            if current_question and line.startswith('Explanation:'):
+                # Start collecting explanation
+                explanation_start = line.split(':', 1)[1].strip()
+                current_explanation = explanation_start
+                collecting_explanation = True
+                continue
 
-                # Handle "Answer: [option]" format
-                if 'answer:' in line_lower:
-                    answer_part = line.split(':', 1)[1].strip().lower()
-                    answer_part = answer_part.replace('[', '').replace(']', '')
-                # Handle "[option]" format
+            # Continue collecting multiline explanation
+            if collecting_explanation and current_question and line.strip():
+                if not line.startswith('QUESTION'):
+                    # Add to explanation if it's not a new question
+                    current_explanation += " " + line
                 else:
-                    answer_part = line.strip().lower().replace('[', '').replace(']', '')
+                    # Hit a new question, save current explanation first
+                    if current_explanation.strip():
+                        result[current_question]["explanation"] = current_explanation.strip()
+                    collecting_explanation = False
+                    current_explanation = ""
 
-                # Match to question categories with fuzzy matching
-                if current_question in CLASSIFICATION_QUESTIONS:
-                    for valid_answer in CLASSIFICATION_QUESTIONS[current_question]:
-                        if (valid_answer.lower() in answer_part or
-                            answer_part in valid_answer.lower() or
-                            self._fuzzy_match(answer_part, valid_answer.lower())):
-                            result[current_question]["answer"] = valid_answer
+                    # Now process the new question line
+                    for question_key, patterns in question_patterns.items():
+                        if any(pattern in line.lower() for pattern in patterns):
+                            current_question = question_key
+
+                            if ':' in line:
+                                answer_part = line.split(':', 1)[1].strip().lower()
+
+                                if current_question in CLASSIFICATION_QUESTIONS:
+                                    # First try exact match
+                                    for valid_answer in CLASSIFICATION_QUESTIONS[current_question]:
+                                        if valid_answer.lower() == answer_part:
+                                            result[current_question]["answer"] = valid_answer
+                                            break
+                                    else:
+                                        # If no exact match, try substring matching (prefer longer matches)
+                                        best_match = None
+                                        best_match_length = 0
+                                        for valid_answer in CLASSIFICATION_QUESTIONS[current_question]:
+                                            if (answer_part in valid_answer.lower() or
+                                                valid_answer.lower() in answer_part):
+                                                # Prefer longer matches (more specific)
+                                                if len(valid_answer) > best_match_length:
+                                                    best_match = valid_answer
+                                                    best_match_length = len(valid_answer)
+
+                                        if best_match:
+                                            result[current_question]["answer"] = best_match
                             break
-
-            # Extract explanations - handle multiline
-            elif current_question and ('explanation:' in line_lower or collecting_explanation):
-                if 'explanation:' in line_lower:
-                    # Start collecting explanation
-                    explanation_start = line.split(':', 1)[1].strip()
-                    current_explanation = explanation_start
-                    collecting_explanation = True
-                elif collecting_explanation and line.strip():
-                    # Continue collecting explanation until we hit another section
-                    if not any(pattern in line_lower for patterns in question_patterns.values() for pattern in patterns):
-                        if not line_lower.startswith('answer:') and not line_lower.startswith('question'):
-                            current_explanation += " " + line
-                    else:
-                        # Hit a new section, save current explanation
-                        if current_question and current_explanation.strip():
-                            result[current_question]["explanation"] = current_explanation.strip()
-                        collecting_explanation = False
-                        current_explanation = ""
+            elif line.strip() == "":
+                # Empty line - save current explanation if we have one
+                if collecting_explanation and current_question and current_explanation.strip():
+                    result[current_question]["explanation"] = current_explanation.strip()
+                    collecting_explanation = False
+                    current_explanation = ""
 
         # Save any remaining explanation
         if current_question and current_explanation.strip():
