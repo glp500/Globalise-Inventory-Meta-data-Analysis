@@ -87,43 +87,60 @@ def detect_model_family(model_name: str) -> str:
     else:
         return "auto"
 
-# Multi-question classification prompt
+# Enhanced historical document classification prompt
 CLASSIFICATION_PROMPT = """
-Analyze this historical document page and provide a detailed analysis. Please respond in the exact format shown below:
+You are analyzing a historical document page from the VOC (Dutch East India Company) archives, dating from approximately 1602-1800. These documents typically contain:
+- Dutch handwritten text in period scripts (secretary hand, cursive)
+- Official records, letters, inventories, and administrative documents
+- Various ink types (iron gall, carbon-based) that may have faded or changed color
+- Aged paper with potential staining, foxing, or physical damage
+- Formal Dutch administrative formatting and layout conventions
 
-SUMMARY: [Write a 2-3 sentence summary describing the page's visual and layout features]
+Examine this page carefully and provide a detailed analysis in the EXACT format below:
 
-QUESTION 1 - Empty or not?
+SUMMARY: [Write 2-3 sentences describing the page's visual appearance, text density, writing style, condition, and overall layout characteristics you observe]
+
+QUESTION 1 - Content presence: Is this page substantially empty or does it contain meaningful content?
 Answer: [blank OR non_blank]
+Explanation: [Describe what you see - blank space, faint marks, substantial text, etc.]
 
-QUESTION 2 - Is it a standard or special page size?
+QUESTION 2 - Page format: What is the physical format of this document page?
 Answer: [standard_page OR extended_foldout OR two_page_spread]
+Explanation: [Describe the aspect ratio, if you see fold marks, multiple page boundaries, or unusual dimensions]
 
-QUESTION 3 - What is the layout of the text on the page?
+QUESTION 3 - Text arrangement: How is the written text organized on the page?
 Answer: [single_column OR two_column OR mixed_layout]
+Explanation: [Describe the column structure, text blocks, and how content is spatially arranged]
 
-QUESTION 4 - Is there a table or tabular data present on the page?
+QUESTION 4 - Tabular content: Are there tables, lists, or structured data arrangements?
 Answer: [table_full OR table_partial OR table_none]
+Explanation: [Describe any tabular structures, ruled lines, columns of data, or list formatting you observe]
 
-QUESTION 5 - Does the page contain marginalia?
+QUESTION 5 - Marginal annotations: Are there notes, comments, or text written in the margins?
 Answer: [marginalia OR no_marginalia]
+Explanation: [Describe any marginal text, whether it appears to be contemporary or later additions]
 
-QUESTION 6 - Does the page contain illustrations or visuals?
+QUESTION 6 - Visual elements: Does the page contain drawings, diagrams, maps, or decorative elements?
 Answer: [illustration OR no_illustration]
+Explanation: [Describe any non-textual visual content including decorative initials, sketches, or diagrams]
 
-QUESTION 7 - Is this a title page?
+QUESTION 7 - Document type: Is this a title page, cover, or introductory page?
 Answer: [title_page OR non_title_page]
+Explanation: [Describe positioning of text, presence of titles, formal presentation suggesting a cover page]
 
-QUESTION 8 - Does the page contain seals or signatures?
+QUESTION 8 - Authentication marks: Are there official seals, stamps, or signature marks?
 Answer: [seal_signature OR no_signatures]
+Explanation: [Describe any wax seals, official stamps, signature marks, or authentication elements]
 
-QUESTION 9 - Is the page damaged or partially visible?
+QUESTION 9 - Physical condition: Is the page damaged, torn, stained, or partially obscured?
 Answer: [damaged_partial OR no_damage]
+Explanation: [Describe any damage, staining, holes, tears, fading, or areas where content is illegible]
 
-QUESTION 10 - Does the page contain indexes, lists, or catalogs?
+QUESTION 10 - Content type: Does this page contain systematic lists, indexes, or catalog-style entries?
 Answer: [index_list OR no_index_list]
+Explanation: [Describe if content appears to be an organized list, index, inventory, or catalog format]
 
-Respond in exactly this format with the exact answer options provided.
+Respond in exactly this format. Be specific about what you observe in the historical document context.
 """
 
 
@@ -271,16 +288,46 @@ class SimpleVOCClassifier:
                 "image_path": str(image_path),
                 "summary": classification_results["summary"],
                 "classifications": {
-                    "empty_status": classification_results["empty_status"],
-                    "page_size": classification_results["page_size"],
-                    "text_layout": classification_results["text_layout"],
-                    "table_presence": classification_results["table_presence"],
-                    "marginalia": classification_results["marginalia"],
-                    "illustrations": classification_results["illustrations"],
-                    "title_page": classification_results["title_page"],
-                    "seals_signatures": classification_results["seals_signatures"],
-                    "damage": classification_results["damage"],
-                    "index_list": classification_results["index_list"]
+                    "empty_status": {
+                        "answer": classification_results["empty_status"]["answer"],
+                        "explanation": classification_results["empty_status"]["explanation"]
+                    },
+                    "page_size": {
+                        "answer": classification_results["page_size"]["answer"],
+                        "explanation": classification_results["page_size"]["explanation"]
+                    },
+                    "text_layout": {
+                        "answer": classification_results["text_layout"]["answer"],
+                        "explanation": classification_results["text_layout"]["explanation"]
+                    },
+                    "table_presence": {
+                        "answer": classification_results["table_presence"]["answer"],
+                        "explanation": classification_results["table_presence"]["explanation"]
+                    },
+                    "marginalia": {
+                        "answer": classification_results["marginalia"]["answer"],
+                        "explanation": classification_results["marginalia"]["explanation"]
+                    },
+                    "illustrations": {
+                        "answer": classification_results["illustrations"]["answer"],
+                        "explanation": classification_results["illustrations"]["explanation"]
+                    },
+                    "title_page": {
+                        "answer": classification_results["title_page"]["answer"],
+                        "explanation": classification_results["title_page"]["explanation"]
+                    },
+                    "seals_signatures": {
+                        "answer": classification_results["seals_signatures"]["answer"],
+                        "explanation": classification_results["seals_signatures"]["explanation"]
+                    },
+                    "damage": {
+                        "answer": classification_results["damage"]["answer"],
+                        "explanation": classification_results["damage"]["explanation"]
+                    },
+                    "index_list": {
+                        "answer": classification_results["index_list"]["answer"],
+                        "explanation": classification_results["index_list"]["explanation"]
+                    }
                 },
                 "raw_response": response,
                 "status": "success",
@@ -293,16 +340,16 @@ class SimpleVOCClassifier:
                 "image_path": str(image_path),
                 "summary": "",
                 "classifications": {
-                    "empty_status": "error",
-                    "page_size": "error",
-                    "text_layout": "error",
-                    "table_presence": "error",
-                    "marginalia": "error",
-                    "illustrations": "error",
-                    "title_page": "error",
-                    "seals_signatures": "error",
-                    "damage": "error",
-                    "index_list": "error"
+                    "empty_status": {"answer": "error", "explanation": ""},
+                    "page_size": {"answer": "error", "explanation": ""},
+                    "text_layout": {"answer": "error", "explanation": ""},
+                    "table_presence": {"answer": "error", "explanation": ""},
+                    "marginalia": {"answer": "error", "explanation": ""},
+                    "illustrations": {"answer": "error", "explanation": ""},
+                    "title_page": {"answer": "error", "explanation": ""},
+                    "seals_signatures": {"answer": "error", "explanation": ""},
+                    "damage": {"answer": "error", "explanation": ""},
+                    "index_list": {"answer": "error", "explanation": ""}
                 },
                 "raw_response": str(e),
                 "status": "error",
@@ -325,7 +372,7 @@ class SimpleVOCClassifier:
         inputs = self.processor(text=[text], images=[image], return_tensors="pt").to(self.device)
 
         with torch.no_grad():
-            generated_ids = self.model.generate(**inputs, max_new_tokens=300, temperature=0.1, do_sample=False)
+            generated_ids = self.model.generate(**inputs, max_new_tokens=600, temperature=0.1, do_sample=False)
 
         generated_ids_trimmed = [
             out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
@@ -338,7 +385,7 @@ class SimpleVOCClassifier:
         inputs = self.processor(prompt, image, return_tensors="pt").to(self.device)
 
         with torch.no_grad():
-            generated_ids = self.model.generate(**inputs, max_new_tokens=300, temperature=0.1, do_sample=False)
+            generated_ids = self.model.generate(**inputs, max_new_tokens=600, temperature=0.1, do_sample=False)
 
         generated_text = self.processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         return generated_text.split("ASSISTANT:")[-1].strip()
@@ -348,7 +395,7 @@ class SimpleVOCClassifier:
         inputs = self.processor(images=image, text=CLASSIFICATION_PROMPT, return_tensors="pt").to(self.device)
 
         with torch.no_grad():
-            generated_ids = self.model.generate(**inputs, max_new_tokens=300, temperature=0.1, do_sample=False)
+            generated_ids = self.model.generate(**inputs, max_new_tokens=600, temperature=0.1, do_sample=False)
 
         return self.processor.batch_decode(generated_ids, skip_special_tokens=True)[0].strip()
 
@@ -369,42 +416,122 @@ class SimpleVOCClassifier:
                     raise RuntimeError("Unable to classify with any known format")
 
     def _parse_multi_question_response(self, response: str) -> Dict[str, Any]:
-        """Parse multi-question response format."""
+        """Parse multi-question response format with explanations - robust version."""
         result = {
             "summary": "",
-            "empty_status": "unknown",
-            "page_size": "unknown",
-            "text_layout": "unknown",
-            "table_presence": "unknown",
-            "marginalia": "unknown",
-            "illustrations": "unknown",
-            "title_page": "unknown",
-            "seals_signatures": "unknown",
-            "damage": "unknown",
-            "index_list": "unknown"
+            "empty_status": {"answer": "unknown", "explanation": ""},
+            "page_size": {"answer": "unknown", "explanation": ""},
+            "text_layout": {"answer": "unknown", "explanation": ""},
+            "table_presence": {"answer": "unknown", "explanation": ""},
+            "marginalia": {"answer": "unknown", "explanation": ""},
+            "illustrations": {"answer": "unknown", "explanation": ""},
+            "title_page": {"answer": "unknown", "explanation": ""},
+            "seals_signatures": {"answer": "unknown", "explanation": ""},
+            "damage": {"answer": "unknown", "explanation": ""},
+            "index_list": {"answer": "unknown", "explanation": ""}
+        }
+
+        # Question mapping with multiple possible identifiers
+        question_patterns = {
+            "empty_status": ["content presence", "question 1", "empty or not"],
+            "page_size": ["page format", "question 2", "page size", "standard or special"],
+            "text_layout": ["text arrangement", "question 3", "text layout", "layout of"],
+            "table_presence": ["tabular content", "question 4", "table", "tabular data"],
+            "marginalia": ["marginal annotations", "question 5", "marginalia"],
+            "illustrations": ["visual elements", "question 6", "illustrations", "visuals"],
+            "title_page": ["document type", "question 7", "title page"],
+            "seals_signatures": ["authentication marks", "question 8", "seals", "signatures"],
+            "damage": ["physical condition", "question 9", "damage", "damaged"],
+            "index_list": ["content type", "question 10", "index", "list", "catalog"]
         }
 
         lines = response.strip().split('\n')
+        current_question = None
+        collecting_explanation = False
+        current_explanation = ""
 
         for line in lines:
+            line_lower = line.strip().lower()
             line = line.strip()
 
             # Extract summary
-            if line.startswith('SUMMARY:'):
-                result["summary"] = line.replace('SUMMARY:', '').strip()
+            if line.startswith('SUMMARY:') or line_lower.startswith('summary:'):
+                result["summary"] = line.split(':', 1)[1].strip() if ':' in line else ""
+                continue
 
-            # Extract answers - look for "Answer:" followed by the response
-            elif 'Answer:' in line:
-                answer_part = line.split('Answer:')[-1].strip().lower()
+            # Identify which question we're processing - more robust matching
+            question_found = False
+            for question_key, patterns in question_patterns.items():
+                for pattern in patterns:
+                    if pattern in line_lower and ('question' in line_lower or ':' in line):
+                        current_question = question_key
+                        collecting_explanation = False
+                        question_found = True
+                        break
+                if question_found:
+                    break
 
-                # Match to question categories
-                for question_key, valid_answers in CLASSIFICATION_QUESTIONS.items():
-                    for valid_answer in valid_answers:
-                        if valid_answer.lower() in answer_part or answer_part in valid_answer.lower():
-                            result[question_key] = valid_answer
+            # Extract answers - multiple formats
+            if current_question and ('answer:' in line_lower or
+                                   (line_lower.strip().startswith('[') and line_lower.strip().endswith(']'))):
+
+                # Handle "Answer: [option]" format
+                if 'answer:' in line_lower:
+                    answer_part = line.split(':', 1)[1].strip().lower()
+                    answer_part = answer_part.replace('[', '').replace(']', '')
+                # Handle "[option]" format
+                else:
+                    answer_part = line.strip().lower().replace('[', '').replace(']', '')
+
+                # Match to question categories with fuzzy matching
+                if current_question in CLASSIFICATION_QUESTIONS:
+                    for valid_answer in CLASSIFICATION_QUESTIONS[current_question]:
+                        if (valid_answer.lower() in answer_part or
+                            answer_part in valid_answer.lower() or
+                            self._fuzzy_match(answer_part, valid_answer.lower())):
+                            result[current_question]["answer"] = valid_answer
                             break
 
+            # Extract explanations - handle multiline
+            elif current_question and ('explanation:' in line_lower or collecting_explanation):
+                if 'explanation:' in line_lower:
+                    # Start collecting explanation
+                    explanation_start = line.split(':', 1)[1].strip()
+                    current_explanation = explanation_start
+                    collecting_explanation = True
+                elif collecting_explanation and line.strip():
+                    # Continue collecting explanation until we hit another section
+                    if not any(pattern in line_lower for patterns in question_patterns.values() for pattern in patterns):
+                        if not line_lower.startswith('answer:') and not line_lower.startswith('question'):
+                            current_explanation += " " + line
+                    else:
+                        # Hit a new section, save current explanation
+                        if current_question and current_explanation.strip():
+                            result[current_question]["explanation"] = current_explanation.strip()
+                        collecting_explanation = False
+                        current_explanation = ""
+
+        # Save any remaining explanation
+        if current_question and current_explanation.strip():
+            result[current_question]["explanation"] = current_explanation.strip()
+
         return result
+
+    def _fuzzy_match(self, text: str, target: str, threshold: float = 0.8) -> bool:
+        """Simple fuzzy matching for answer validation."""
+        # Remove common separators and check similarity
+        text_clean = text.replace('_', ' ').replace('-', ' ')
+        target_clean = target.replace('_', ' ').replace('-', ' ')
+
+        # Check if significant portion matches
+        words_text = text_clean.split()
+        words_target = target_clean.split()
+
+        if not words_text or not words_target:
+            return False
+
+        matches = sum(1 for word in words_text if word in words_target)
+        return matches / max(len(words_text), len(words_target)) >= threshold
 
     def classify_directory(self, input_dir: str) -> List[Dict[str, Any]]:
         """Classify all images in a directory."""
@@ -506,7 +633,8 @@ Examples:
             for result in results:
                 if result['status'] == 'success':
                     classifications = result['classifications']
-                    for question_key, answer in classifications.items():
+                    for question_key, classification_data in classifications.items():
+                        answer = classification_data['answer']
                         if answer not in question_stats[question_key]:
                             question_stats[question_key][answer] = 0
                         question_stats[question_key][answer] += 1
